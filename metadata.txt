@@ -12,8 +12,8 @@ email=andrea.filipello@arpa.piemonte.it
 
 about=The Geohazard plugin incorporates several specialized algorithms to evaluate the reliability of InSAR data in monitoring slow landslide phenomena (Groundmotion – C index), to assess slope susceptibility to shallow landslides (Landslide – Shalstab), and to perform a preliminary assessment of rockfall spatial hazard (Rockfall – Droka).
 
-tracker=http://bugs
-repository=http://repo
+tracker=https://github.com/Arpapiemonte/geohazard/issues
+repository=https://github.com/Arpapiemonte/geohazard
 # End of mandatory metadata
 
 # Recommended items:
@@ -25,7 +25,7 @@ hasProcessingProvider=yes
 # Tags are comma separated with spaces allowed
 tags=landslide, egms, rockfall, shalstab, geology, hazard, cone method, c index, arpa, visibility, critical rainfall, susceptibility, qproto
 
-homepage=http://homepage
+homepage=https://www.arpa.piemonte.it
 category=Analysis
 icon=Logo.png
 # experimental flag
