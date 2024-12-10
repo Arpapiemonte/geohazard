@@ -2,7 +2,7 @@
 
 The Geohazard plugin provides four algorithms designed for analyzing and managing geohazards, including ground motion, shallow landslides, and rockfall events. Below is an overview of the available modules.
 
-** Please note that the plugin is available exclusively in the Processing Toolbox. The toolbox provides a comprehensive list of all available algorithms, including those related to geohazards.
+**Please note that the plugin is available exclusively in the Processing Toolbox. The toolbox provides a comprehensive list of all available algorithms, including those related to geohazards.
 
 ### **1. Groundmotion - C Index**
 
