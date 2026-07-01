@@ -30,6 +30,10 @@ __copyright__ = '(C) 2024 by Campus S., Castelli M., Fasciano C., Filipello A.'
 
 __revision__ = '$Format:%H$'
 
+import os
+# Importa QIcon da PyQt5 per le icone
+from PyQt5.QtGui import QIcon 
+
 from qgis.core import QgsProcessing
 from qgis.core import QgsProcessingAlgorithm
 from qgis.core import QgsProcessingMultiStepFeedback
@@ -42,6 +46,19 @@ import processing
 
 
 class RockfallDrokaBasic(QgsProcessingAlgorithm):
+
+## Aggiunta Icona
+    def icon(self):
+        """
+        Should return a QIcon which is used for your provider inside
+        the Processing toolbox.
+        """
+        # Individua la cartella del plugin in cui risiede questo file script
+        cmd_folder = os.path.dirname(__file__)
+        # Costruisce il percorso relativo verso la sottocartella icons
+        icon_path = os.path.join(cmd_folder, 'icons', 'droka.png')
+        
+        return QIcon(icon_path)
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterRasterLayer('dtm', 'DTM', defaultValue=None))

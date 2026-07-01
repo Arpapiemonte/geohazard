@@ -30,8 +30,9 @@ __copyright__ = '(C) 2024 by Campus S., Castelli M., Fasciano C., Filipello A.'
 
 __revision__ = '$Format:%H$'
 
+import os
 from qgis.core import QgsProcessingProvider
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtGui import QIcon
 from .Cindex_algorithm import GroundmotionCIndex
 from .Shalstab_algorithm import LandslideShalstab
 from .Shalstabinputcreator_algorithm import LandslideShalstabInputRasterCreator
@@ -87,8 +88,12 @@ class GeohazardProvider(QgsProcessingProvider):
         Should return a QIcon which is used for your provider inside
         the Processing toolbox.
         """
-        icon_path = r"C:\Users\fasci\Desktop\geohazard\icon.png"
-        return QIcon(QPixmap(icon_path))
+        # Individua la cartella del plugin in cui risiede questo file script
+        cmd_folder = os.path.dirname(__file__)
+        # Costruisce il percorso relativo verso la sottocartella icons
+        icon_path = os.path.join(cmd_folder, 'icons', 'geohazard.png')
+        
+        return QIcon(icon_path)
 
     def longName(self):
         """
