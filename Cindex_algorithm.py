@@ -19,7 +19,7 @@
  * the Free Software Foundation; either version 2 of the License, or     *
  * (at your option) any later version.                                   *
  * *
- ***************************************************************************/
+ * *************************************************************************/
 """
 
 __author__ = 'Campus S., Castelli M., Fasciano C., Filipello A.'
@@ -30,7 +30,6 @@ __copyright__ = '(C) 2024 by Campus S., Castelli M., Fasciano C., Filipello A.'
 __revision__ = '$Format:%H$'
 
 import os
-# CORREZIONE: Importa QIcon da PyQt5 per evitare il NameError
 from PyQt5.QtGui import QIcon 
 from qgis.core import (
     QgsProcessing,
@@ -40,7 +39,8 @@ from qgis.core import (
     QgsProcessingParameterNumber,
     QgsProcessingParameterRasterDestination,
     QgsProcessingLayerPostProcessorInterface,
-    QgsColorRampShader
+    QgsColorRampShader,
+    QgsProcessingContext
 )
 import processing
 
@@ -92,16 +92,17 @@ class VisibilityStyleProcessor(QgsProcessingLayerPostProcessorInterface):
 
 class GroundmotionCIndex(QgsProcessingAlgorithm):
 
+    def createInstance(self):
+        # Ritorna una nuova istanza della classe, risolvendo l'errore NotImplementedError
+        return GroundmotionCIndex()
+
     def icon(self):
         """
         Should return a QIcon which is used for your provider inside
         the Processing toolbox.
         """
-        # Individua la cartella del plugin in cui risiede questo file script
         cmd_folder = os.path.dirname(__file__)
-        # Costruisce il percorso relativo verso la sottocartella icons
         icon_path = os.path.join(cmd_folder, 'icons', 'Cindex_algorithm.png')
-        
         return QIcon(icon_path)
 
     def initAlgorithm(self, config=None):
@@ -114,11 +115,45 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
         self.addParameter(QgsProcessingParameterRasterDestination('Class_of_visibility', 'Class_of_visibility', createByDefault=True, defaultValue=None))
 
     def processAlgorithm(self, parameters, context, model_feedback):
-        # Use a multi-step feedback, so that individual child algorithm progress reports are adjusted for the
-        # overall progress through the model
         feedback = QgsProcessingMultiStepFeedback(11, model_feedback)
         results = {}
         outputs = {}
+
+        # --- ESTRAZIONE PARAMETRI E COSTRUZIONE NOMI DINAMICI ---
+        inc_angle = parameters.get('__incidence_angle_090', 39)
+        track_angle = parameters.get('__track_angle__azimut_0360', 0)
+        
+        # Sostituiamo i punti con underscore per pulizia (es: 39.5 -> 39_5)
+        inc_str = str(inc_angle).replace('.', '_')
+        track_str = str(track_angle).replace('.', '_')
+        
+        # Suffisso comune per i nomi dei layer in legenda
+        suffix = f"_track{track_str}_inc{inc_str}"
+        
+        # Nomi visualizzati finali in QGIS
+        name_c_index = f"C_Index{suffix}"
+        name_percentage = f"Percentage_c_index{suffix}"
+        name_visibility = f"Class_of_visibility{suffix}"
+
+        # Gestione dei percorsi fisici se l'utente ha scelto "Salva su file"
+        c_index_dest = parameters['C_index']
+        if c_index_dest and isinstance(c_index_dest, str) and not c_index_dest.startswith('memory:'):
+            base, ext = os.path.splitext(c_index_dest)
+            if not base.endswith(suffix):
+                c_index_dest = f"{base}{suffix}{ext}"
+
+        perc_c_index_dest = parameters['Percentage_c_index']
+        if perc_c_index_dest and isinstance(perc_c_index_dest, str) and not perc_c_index_dest.startswith('memory:'):
+            base, ext = os.path.splitext(perc_c_index_dest)
+            if not base.endswith(suffix):
+                perc_c_index_dest = f"{base}{suffix}{ext}"
+
+        class_vis_dest = parameters['Class_of_visibility']
+        if class_vis_dest and isinstance(class_vis_dest, str) and not class_vis_dest.startswith('memory:'):
+            base, ext = os.path.splitext(class_vis_dest)
+            if not base.endswith(suffix):
+                class_vis_dest = f"{base}{suffix}{ext}"
+        # --------------------------------------------------------
 
         # Raster_φ - Track angle
         alg_params = {
@@ -143,7 +178,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'BAND_D': None,
             'BAND_E': None,
             'BAND_F': None,
-            'EXTENT_OPT': 0,  # Ignore
+            'EXTENT_OPT': 0,
             'EXTRA': '',
             'FORMULA': 'A+90',
             'INPUT_A': outputs['Raster_TrackAngle']['OUTPUT'],
@@ -155,7 +190,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'NO_DATA': None,
             'OPTIONS': '',
             'PROJWIN': None,
-            'RTYPE': 5,  # Float32
+            'RTYPE': 5,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['AzimutAngle'] = processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
@@ -168,7 +203,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
         alg_params = {
             'EXTENT': parameters['dtm'],
             'NUMBER': parameters['__incidence_angle_090'],
-            'OUTPUT_TYPE': 5,  # Float32
+            'OUTPUT_TYPE': 5,
             'PIXEL_SIZE': parameters['cell_size'],
             'TARGET_CRS': parameters['dtm'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -187,7 +222,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'BAND_D': None,
             'BAND_E': None,
             'BAND_F': None,
-            'EXTENT_OPT': 0,  # Ignore
+            'EXTENT_OPT': 0,
             'EXTRA': '',
             'FORMULA': 'cos(radians(A))',
             'INPUT_A': outputs['Raster_IncidenceAngle']['OUTPUT'],
@@ -199,7 +234,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'NO_DATA': None,
             'OPTIONS': '',
             'PROJWIN': None,
-            'RTYPE': 5,  # Float32
+            'RTYPE': 5,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['H'] = processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
@@ -216,7 +251,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'BAND_D': None,
             'BAND_E': None,
             'BAND_F': None,
-            'EXTENT_OPT': 0,  # Ignore
+            'EXTENT_OPT': 0,
             'EXTRA': '',
             'FORMULA': 'cos(radians(90)-radians(A))*cos(radians(180)-radians(B))',
             'INPUT_A': outputs['Raster_IncidenceAngle']['OUTPUT'],
@@ -228,7 +263,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'NO_DATA': None,
             'OPTIONS': '',
             'PROJWIN': None,
-            'RTYPE': 5,  # Float32
+            'RTYPE': 5,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['N'] = processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
@@ -263,7 +298,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'BAND_D': None,
             'BAND_E': None,
             'BAND_F': None,
-            'EXTENT_OPT': 0,  # Ignore
+            'EXTENT_OPT': 0,
             'EXTRA': '',
             'FORMULA': 'cos(radians(90)-radians(A))*cos(radians(270)-radians(B))',
             'INPUT_A': outputs['Raster_IncidenceAngle']['OUTPUT'],
@@ -275,7 +310,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'NO_DATA': None,
             'OPTIONS': '',
             'PROJWIN': None,
-            'RTYPE': 5,  # Float32
+            'RTYPE': 5,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['E'] = processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
@@ -302,7 +337,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
         if feedback.isCanceled():
             return {}
 
-        # C_Index
+        # 1. Generazione C_Index
         alg_params = {
             'BAND_A': 1,
             'BAND_B': 1,
@@ -310,7 +345,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'BAND_D': 1,
             'BAND_E': 1,
             'BAND_F': None,
-            'EXTENT_OPT': 0,  # Ignore
+            'EXTENT_OPT': 0,
             'EXTRA': '',
             'FORMULA': 'C * (cos(radians(A)))*(sin(radians(B)-radians(90))) + D * (-1) * (cos(radians(A)))*(cos((radians(B))-radians(90))) + E * (sin(radians(A)))',
             'INPUT_A': outputs['SSlope']['OUTPUT'],
@@ -322,17 +357,22 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'NO_DATA': None,
             'OPTIONS': '',
             'PROJWIN': parameters['dtm'],
-            'RTYPE': 5,  # Float32
-            'OUTPUT': parameters['C_index']
+            'RTYPE': 5,
+            'OUTPUT': c_index_dest
         }
         outputs['C_index'] = processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        results['C_index'] = outputs['C_index']['OUTPUT']
+        
+        # Forza il caricamento con il nome personalizzato
+        context.addLayerToLoadOnCompletion(
+            outputs['C_index']['OUTPUT'],
+            QgsProcessingContext.LayerDetails(name_c_index, context.project(), 'C_index')
+        )
 
         feedback.setCurrentStep(9)
         if feedback.isCanceled():
             return {}
 
-        # Percentage_c_index
+        # 2. Generazione Percentage_c_index
         alg_params = {
             'BAND_A': 1,
             'BAND_B': None,
@@ -340,7 +380,7 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'BAND_D': None,
             'BAND_E': None,
             'BAND_F': None,
-            'EXTENT_OPT': 0,  # Ignore
+            'EXTENT_OPT': 0,
             'EXTRA': '',
             'FORMULA': ' abs(A)*100',
             'INPUT_A': outputs['C_index']['OUTPUT'],
@@ -352,43 +392,50 @@ class GroundmotionCIndex(QgsProcessingAlgorithm):
             'NO_DATA': None,
             'OPTIONS': '',
             'PROJWIN': None,
-            'RTYPE': 5,  # Float32
-            'OUTPUT': parameters['Percentage_c_index']
+            'RTYPE': 5,
+            'OUTPUT': perc_c_index_dest
         }
         outputs['Percentage_c_index'] = processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        results['Percentage_c_index'] = outputs['Percentage_c_index']['OUTPUT']
+        
+        # Forza il caricamento con il nome personalizzato
+        context.addLayerToLoadOnCompletion(
+            outputs['Percentage_c_index']['OUTPUT'],
+            QgsProcessingContext.LayerDetails(name_percentage, context.project(), 'Percentage_c_index')
+        )
 
         feedback.setCurrentStep(10)
         if feedback.isCanceled():
             return {}
 
-        # Reclassify_percentage
+        # 3. Generazione Class_of_visibility
         alg_params = {
-            'DATA_TYPE': 5,  # Float32
+            'DATA_TYPE': 5,
             'INPUT_RASTER': outputs['Percentage_c_index']['OUTPUT'],
             'NODATA_FOR_MISSING': False,
             'NO_DATA': -9999,
-            'RANGE_BOUNDARIES': 0,  # min < valore <= max
+            'RANGE_BOUNDARIES': 0,
             'RASTER_BAND': 1,
             'TABLE': ['0','20','1','20','40','2','40','60','3','60','80','4','80','100','5'],
-            'OUTPUT': parameters['Class_of_visibility']
+            'OUTPUT': class_vis_dest
         }
         outputs['Reclassify_percentage'] = processing.run('native:reclassifybytable', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        results['Class_of_visibility'] = outputs['Reclassify_percentage']['OUTPUT']
+        
+        # Forza il caricamento con il nome personalizzato
+        context.addLayerToLoadOnCompletion(
+            outputs['Reclassify_percentage']['OUTPUT'],
+            QgsProcessingContext.LayerDetails(name_visibility, context.project(), 'Class_of_visibility')
+        )
 
         # --- APPLICAZIONE AUTOMATICA DELLO STILE TRAMITE POST-PROCESSOR ---
         plugin_dir = os.path.dirname(__file__)
         qml_path = os.path.join(plugin_dir, "stile_visibilita.qml")
 
-        # Verifica se lo strato deve essere caricato nel progetto a fine computazione
         if context.willLoadLayerOnCompletion('Class_of_visibility'):
             global style_processor_instance
-            # Inizializza il processor personalizzato passando il percorso del file .qml
             style_processor_instance = VisibilityStyleProcessor(qml_path)
-            # Collega l'istanza alla coda dei compiti di post-caricamento di QGIS Processing
             context.layerToLoadOnCompletionDetails('Class_of_visibility').setPostProcessor(style_processor_instance)
 
-        return results
+        return {}
 
     def name(self):
         return 'Groundmotion - C index'
@@ -414,51 +461,4 @@ p, li { white-space: pre-wrap; }
 <p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><span style=" font-style:italic;">C = [N * cos(S) * sin (A - π/2)] + [E * (-1) * cos(S) * cos (A - π/2)] + [H * sin (S)]</span>   </p>
 <p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">Where, </p>
 <p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">S = Slope = slope of the side, calculated in radians and obtained from the digital soil model; </p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">A = Aspect = exposure of the side to the cardinal points, calculated in radians and obtained from the digital soil model; </p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">H, N, E = three cosines directors, the value of which depends on the satellite orbit parameters </p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><span style=" font-style:italic;">N = cos (π/2 - θ) * cos (π - φ)</span></p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><span style=" font-style:italic;">E = cos (π/2 - θ) * cos (3π/2 - φ)</span> </p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><span style=" font-style:italic;">H = cos (θ)</span> </p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><span style=" font-style:italic;">φ = track angle +90 = </span>azimuthal angle relative to satellite LOS </p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><span style=" font-style:italic;">θ =</span> incidence angle</p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">The track angle and incidence angle are provided within the processed SAR images for each satellite (and, in the case of EGMS, are found among the point attributes, while slope and aspect values are derived from the DTM.</p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">The aim is to calculate VSLOPE that is the projection of the LOS velocity (VLOS) along the direction of maximum slope through the relation:</p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><span style=" font-style:italic;">V</span><span style=" font-style:italic; vertical-align:sub;">slope</span><span style=" font-style:italic;"> = V</span><span style=" font-style:italic; vertical-align:sub;">los</span><span style=" font-style:italic;">/C</span> </p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">For C values close to 1, the movement is correctly observed by the satellite and the motion component is close to 100%. For negative <span style=" font-style:italic;">C</span> values, the recorded movement is in the opposite direction; in this case, if the speeds agree with the movement along the slope, the V<span style=" vertical-align:sub;">slope</span> will report a change of sign with respect to the original VLOS. For C values close to zero, the V<span style=" vertical-align:sub;">slope</span> tends to infinity, for this reason,<span style=" font-style:italic;"> C=0.2</span> is imposed when <span style=" font-style:italic;">-0.2&lt;C&lt;0.2</span>. </p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">In the analysis of landslide movements, the values recorded by the satellite may be significantly underestimated compared to the real values. Therefore, it is of fundamental importance to compare the data obtained from interferometric processing of satellite images with the percentage of movement detected along the LOS by that specific satellite.</p>
-<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">Otherwise, one could wrongly attribute a &quot;stable&quot; state to a landslide movement without taking into account that the direction of observation of the satellite may not be suitable.</p>
-<p style="-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><br /></p></body></html></p>
-<h2>Parametri in ingresso
-</h2>
-<h3>DTM</h3>
-<p>Raster layer of the DTM.
-Preferable resolution greater than 20 m</p>
-<h3>Cell size</h3>
-<p>Dimension of the DTM cell (m)</p>
-<h3>θ - Incidence angle (0-90)</h3>
-<p>The inclination of the LOS with respect to the vertical.
-Average value of 350° for the ascending orbit and 190° for the descending orbit.</p>
-<h3>φ - Track angle - Azimut (0-360)</h3>
-<p>The angle between the projection of the satellite trajectory on the horizontal plane and geographic north.
-Average value of 39° for both orbits.</p>
-<h2>Risultati</h2>
-<h3>C_Index</h3>
-<p>The result will be a raster in which the C-index values range from -1 to +1. This way you can identify the best or worst exposed slopes.</p>
-<h3>Percentage_c_index</h3>
-<p>Raster of the spatial distribution of the percentage of estimated real speed effectively detected along the ascending and descending LOS relative to the satellite SENTINEL-1.</p>
-<h3>Class_of_visibility</h3>
-<p>Classification of the percentage of visibility in 5 classes
-Class 1: 0-20%
-Class 2: 20-40%
-Class 3: 40-60%
-Class 4: 60-80%
-Class 5: 80-100%</p>
-<h2>Esempi</h2>
-<p><!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0//EN" "http://www.w3.org/TR/REC-html40/strict.dtd">
-<html><head><meta name="qrichtext" content="1" /><style type="text/css">
-p, li { white-space: pre-wrap; }
-</style></head><body style=" font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;">
-<p style="-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><br /></p></body></html></p><br><p align="right">Autore della guida: Claudio Fasciano</p></body></html>"""
-
-    def createInstance(self):
-        return GroundmotionCIndex()
+<p style=" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">A = Aspect = exposure of the side to the cardinal points, calculated</p></body></html>"""

@@ -42,8 +42,10 @@ from qgis.core import QgsProcessingParameterNumber
 from qgis.core import QgsProcessingParameterVectorLayer
 from qgis.core import QgsProcessingParameterFeatureSink
 from qgis.core import QgsProcessingParameterDefinition
+from qgis.core import QgsProcessingContext
 import processing
-
+# Aggiungo per nome output
+from qgis.core import QgsProcessingContext
 
 class RockfallDrokaBasic(QgsProcessingAlgorithm):
 
@@ -69,7 +71,7 @@ class RockfallDrokaBasic(QgsProcessingAlgorithm):
         self.addParameter(param)
         self.addParameter(QgsProcessingParameterNumber('energy_angle_', 'Energy angle (°)', type=QgsProcessingParameterNumber.Double, minValue=10, maxValue=90, defaultValue=40))
         self.addParameter(QgsProcessingParameterNumber('mass_kg', 'Mass (kg)', type=QgsProcessingParameterNumber.Integer, defaultValue=2600))
-        self.addParameter(QgsProcessingParameterFeatureSink('Results_drokaFlow', 'Results_Droka flow', type=QgsProcessing.TypeVectorAnyGeometry, createByDefault=True, supportsAppend=True, defaultValue=None))
+        self.addParameter(QgsProcessingParameterFeatureSink('Results_drokaBasic', 'Results_Droka basic', type=QgsProcessing.TypeVectorAnyGeometry, createByDefault=True, supportsAppend=True, defaultValue=None))
 
     def processAlgorithm(self, parameters, context, model_feedback):
         # Use a multi-step feedback, so that individual child algorithm progress reports are adjusted for the
@@ -476,16 +478,35 @@ class RockfallDrokaBasic(QgsProcessingAlgorithm):
         if feedback.isCanceled():
             return {}
 
+   
         # Delete fields
         alg_params = {
             'COLUMN': ['left','top','right','bottom','row_index','col_index'],
             'INPUT': outputs['RenameFieldCount']['OUTPUT'],
-            'OUTPUT': parameters['Results_drokaFlow']
+            'OUTPUT': parameters['Results_drokaBasic']
         }
         outputs['DeleteFields'] = processing.run('native:deletecolumn', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        results['Results_drokaFlow'] = outputs['DeleteFields']['OUTPUT']
-        return results
+        
+        # --- COSTRUZIONE DEL NOME DINAMICO CON ENTRAMBI GLI ANGOLI ---
+        # Recuperiamo i valori dei due angoli inseriti dall'utente
+        energy_angle_val = parameters.get('energy_angle_', '')
+        lateral_angle_val = parameters.get('lateral_spreading_angle_', '')
+        
+        # Creiamo il nome del file includendo entrambi i valori (es. droka_basic_output_E40_L15)
+        output_name = f"droka_basic_output_E{energy_angle_val}_L{lateral_angle_val}"
+        
+        # Recuperiamo la destinazione effettiva dell'output
+        output_layer = outputs['DeleteFields']['OUTPUT']
+        
+        # Passiamo il nome dinamico al contesto di QGIS
+        context.addLayerToLoadOnCompletion(
+            output_layer,
+            QgsProcessingContext.LayerDetails(output_name, context.project(), 'Results_drokaBasic')
+        )
+        # ------------------------------------------------------------
 
+        results['Results_drokaBasic'] = output_layer
+        return results
     def name(self):
         return 'Rockfall - Droka basic'
 

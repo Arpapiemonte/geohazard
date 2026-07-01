@@ -45,6 +45,7 @@ from qgis.core import QgsProcessingParameterDefinition
 from qgis.core import QgsCoordinateReferenceSystem
 import processing
 
+from qgis.core import QgsProcessingContext, QgsCoordinateReferenceSystem
 
 class RockfallDrokaFlow(QgsProcessingAlgorithm):
 ## Aggiunta Icona
@@ -903,15 +904,44 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         if feedback.isCanceled():
             return {}
 
-        # Delete fields
+        # # Delete fields
+        # alg_params = {
+            # 'COLUMN': ['left','top','right','bottom','row_index','col_index'],
+            # 'INPUT': outputs['Recap_velocity']['OUTPUT'],
+            # 'OUTPUT': parameters['Results_drokaBasic']
+        # }
+        # outputs['DeleteFields'] = processing.run('native:deletecolumn', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        # results['Results_drokaBasic'] = outputs['DeleteFields']['OUTPUT']
+        # return results
+        
+        
+        # Nuovo Delete fields
         alg_params = {
             'COLUMN': ['left','top','right','bottom','row_index','col_index'],
             'INPUT': outputs['Recap_velocity']['OUTPUT'],
             'OUTPUT': parameters['Results_drokaBasic']
         }
         outputs['DeleteFields'] = processing.run('native:deletecolumn', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        results['Results_drokaBasic'] = outputs['DeleteFields']['OUTPUT']
-        return results
+        
+        # --- COSTRUZIONE DEL NOME DINAMICO IN BASE ALL'ENERGY ANGLE ---
+        # Recuperiamo il valore dell'energy angle inserito dall'utente
+        energy_angle_val = parameters.get('energy_angle_', '')
+        
+        # Creiamo il nome del file includendo il valore dell'angolo (es. droka_flow_output_E35)
+        output_name = f"droka_flow_output_E{energy_angle_val}"
+        
+        # Recuperiamo il layer finale di output
+        output_layer = outputs['DeleteFields']['OUTPUT']
+        
+        # Passiamo il nome dinamico al contesto di QGIS per caricarlo correttamente a schermo
+        context.addLayerToLoadOnCompletion(
+            output_layer,
+            QgsProcessingContext.LayerDetails(output_name, context.project(), 'Results_drokaBasic')
+        )
+        # ------------------------------------------------------------
+
+        results['Results_drokaBasic'] = output_layer
+        return results        
 
     def name(self):
         return 'Rockfall - Droka flow'
