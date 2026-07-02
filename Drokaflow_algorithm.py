@@ -78,7 +78,7 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
     def processAlgorithm(self, parameters, context, model_feedback):
         # Use a multi-step feedback, so that individual child algorithm progress reports are adjusted for the
         # overall progress through the model
-        feedback = QgsProcessingMultiStepFeedback(47, model_feedback)
+        feedback = QgsProcessingMultiStepFeedback(52, model_feedback)
         results = {}
         outputs = {}
 
@@ -915,25 +915,118 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         # return results
         
         
-        # Nuovo Delete fields
+        # # Nuovo Delete fields
+        # alg_params = {
+            # 'COLUMN': ['left','top','right','bottom','row_index','col_index'],
+            # 'INPUT': outputs['Recap_velocity']['OUTPUT'],
+            # 'OUTPUT': parameters['Results_drokaBasic']
+        # }
+        # outputs['DeleteFields'] = processing.run('native:deletecolumn', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        
+        # # --- COSTRUZIONE DEL NOME DINAMICO IN BASE ALL'ENERGY ANGLE ---
+        # # Recuperiamo il valore dell'energy angle inserito dall'utente
+        # energy_angle_val = parameters.get('energy_angle_', '')
+        
+        # # Creiamo il nome del file includendo il valore dell'angolo (es. droka_flow_output_E35)
+        # output_name = f"droka_flow_output_E{energy_angle_val}"
+        
+        # # Recuperiamo il layer finale di output
+        # output_layer = outputs['DeleteFields']['OUTPUT']
+        
+        # # Passiamo il nome dinamico al contesto di QGIS per caricarlo correttamente a schermo
+        # context.addLayerToLoadOnCompletion(
+            # output_layer,
+            # QgsProcessingContext.LayerDetails(output_name, context.project(), 'Results_drokaBasic')
+        # )
+        # # ------------------------------------------------------------
+
+        # results['Results_drokaBasic'] = output_layer
+        # return results    
+# Nuovo Delete fields (Modificato l'output in TEMPORARY_OUTPUT)
         alg_params = {
             'COLUMN': ['left','top','right','bottom','row_index','col_index'],
             'INPUT': outputs['Recap_velocity']['OUTPUT'],
-            'OUTPUT': parameters['Results_drokaBasic']
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['DeleteFields'] = processing.run('native:deletecolumn', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(47)
+        if feedback.isCanceled():
+            return {}
+
+        # --- INTEGRAZIONE CON STRUMENTO PER PULIZIA DEI DATI CNON CONNESSI ALLA SORGENTE DEL CROLLO---
+        
+        # 1. Buffer (IMPOSTATO 3 VOLTE IL PASSO DEL DTM, MA DA MODIFICARE)
+        alg_params = {
+            'DISSOLVE': False,
+            'DISTANCE': parameters['cell_size'] * 3,
+            'END_CAP_STYLE': 0,  # Arrotondato
+            'INPUT': outputs['DeleteFields']['OUTPUT'],
+            'JOIN_STYLE': 0,  # Arrotondato
+            'MITER_LIMIT': 2,
+            'SEGMENTS': 1,
+            'SEPARATE_DISJOINT': False,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Buffer'] = processing.run('native:buffer', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(48)
+        if feedback.isCanceled():
+            return {}
+
+        # 2. Dissolvi
+        alg_params = {
+            'FIELD': [''],
+            'INPUT': outputs['Buffer']['OUTPUT'],
+            'SEPARATE_DISJOINT': False,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Dissolvi'] = processing.run('native:dissolve', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(49)
+        if feedback.isCanceled():
+            return {}
+
+        # 3. Da multi parte a parti singole
+        alg_params = {
+            'INPUT': outputs['Dissolvi']['OUTPUT'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['DaMultiParteAPartiSingole'] = processing.run('native:multiparttosingleparts', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(50)
+        if feedback.isCanceled():
+            return {}
+
+        # 4. Estrai 1
+        alg_params = {
+            'INPUT': outputs['DaMultiParteAPartiSingole']['OUTPUT'],
+            'INTERSECT': parameters['source_point'],
+            'PREDICATE': [0],  # interseca
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Estrai1'] = processing.run('native:extractbylocation', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(51)
+        if feedback.isCanceled():
+            return {}
+
+        # 5. Estrai 2 (Output finale salvato nel parametro definitivo)
+        alg_params = {
+            'INPUT': outputs['DeleteFields']['OUTPUT'],
+            'INTERSECT': outputs['Estrai1']['OUTPUT'],
+            'PREDICATE': [4,6],  # tocca,sono contenuti
+            'OUTPUT': parameters['Results_drokaBasic']
+        }
+        outputs['Estrai2'] = processing.run('native:extractbylocation', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
         
         # --- COSTRUZIONE DEL NOME DINAMICO IN BASE ALL'ENERGY ANGLE ---
-        # Recuperiamo il valore dell'energy angle inserito dall'utente
         energy_angle_val = parameters.get('energy_angle_', '')
+        output_name = f"droka_flow_output_E{energy_angle_val}_pulito"
         
-        # Creiamo il nome del file includendo il valore dell'angolo (es. droka_flow_output_E35)
-        output_name = f"droka_flow_output_E{energy_angle_val}"
+        # Il layer finale diventa ora il risultato di Estrai2
+        output_layer = outputs['Estrai2']['OUTPUT']
         
-        # Recuperiamo il layer finale di output
-        output_layer = outputs['DeleteFields']['OUTPUT']
-        
-        # Passiamo il nome dinamico al contesto di QGIS per caricarlo correttamente a schermo
         context.addLayerToLoadOnCompletion(
             output_layer,
             QgsProcessingContext.LayerDetails(output_name, context.project(), 'Results_drokaBasic')

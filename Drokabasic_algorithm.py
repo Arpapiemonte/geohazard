@@ -76,7 +76,7 @@ class RockfallDrokaBasic(QgsProcessingAlgorithm):
     def processAlgorithm(self, parameters, context, model_feedback):
         # Use a multi-step feedback, so that individual child algorithm progress reports are adjusted for the
         # overall progress through the model
-        feedback = QgsProcessingMultiStepFeedback(26, model_feedback)
+        feedback = QgsProcessingMultiStepFeedback(31, model_feedback)
         results = {}
         outputs = {}
 
@@ -477,28 +477,92 @@ class RockfallDrokaBasic(QgsProcessingAlgorithm):
         feedback.setCurrentStep(25)
         if feedback.isCanceled():
             return {}
-
-   
+        
         # Delete fields
         alg_params = {
             'COLUMN': ['left','top','right','bottom','row_index','col_index'],
             'INPUT': outputs['RenameFieldCount']['OUTPUT'],
-            'OUTPUT': parameters['Results_drokaBasic']
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['DeleteFields'] = processing.run('native:deletecolumn', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
         
-        # --- COSTRUZIONE DEL NOME DINAMICO CON ENTRAMBI GLI ANGOLI ---
-        # Recuperiamo i valori dei due angoli inseriti dall'utente
+        feedback.setCurrentStep(26)
+        if feedback.isCanceled():
+            return {}
+
+        # --- INTEGRAZIONE PULIZIA PER TOGLIERE I PUNTI CHE NON SONO CONNESSI ALLA ZONA DI DISTACCO---
+        # 1. Buffer (Ipotizzo 3 volte la dimensione delle celle --> cell_size * 3)
+        alg_params = {
+            'DISSOLVE': False,
+            'DISTANCE': parameters['cell_size'] * 3,
+            'END_CAP_STYLE': 0,  # Arrotondato
+            'INPUT': outputs['DeleteFields']['OUTPUT'],
+            'JOIN_STYLE': 0,  # Arrotondato
+            'MITER_LIMIT': 2,
+            'SEGMENTS': 1,
+            'SEPARATE_DISJOINT': False,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Buffer_pulizia'] = processing.run('native:buffer', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(27)
+        if feedback.isCanceled():
+            return {}
+
+        # 2. Dissolvi
+        alg_params = {
+            'FIELD': [''],
+            'INPUT': outputs['Buffer_pulizia']['OUTPUT'],
+            'SEPARATE_DISJOINT': False,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Dissolvi_pulizia'] = processing.run('native:dissolve', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(28)
+        if feedback.isCanceled():
+            return {}
+
+        # 3. Da multi parte a parti singole
+        alg_params = {
+            'INPUT': outputs['Dissolvi_pulizia']['OUTPUT'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['PartiSingole_pulizia'] = processing.run('native:multiparttosingleparts', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(29)
+        if feedback.isCanceled():
+            return {}
+
+        # 4. Estrai 1 (Intersezione con source_points)
+        alg_params = {
+            'INPUT': outputs['PartiSingole_pulizia']['OUTPUT'],
+            'INTERSECT': parameters['source_points'],
+            'PREDICATE': [0],  # interseca
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['EstraiPoligonoValido'] = processing.run('native:extractbylocation', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(30)
+        if feedback.isCanceled():
+            return {}
+
+        # 5. Estrai 2 (Filtro finale sui punti connessi)
+        alg_params = {
+            'INPUT': outputs['DeleteFields']['OUTPUT'],
+            'INTERSECT': outputs['EstraiPoligonoValido']['OUTPUT'],
+            'PREDICATE': [4,6],  # tocca, sono contenuti
+            'OUTPUT': parameters['Results_drokaBasic']
+        }
+        outputs['Pulito_Finale'] = processing.run('native:extractbylocation', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        # ----------------------------
+
+        # --- COSTRUZIONE DEL NOME DINAMICO SUL LAYER PULITO ---
         energy_angle_val = parameters.get('energy_angle_', '')
         lateral_angle_val = parameters.get('lateral_spreading_angle_', '')
         
-        # Creiamo il nome del file includendo entrambi i valori (es. droka_basic_output_E40_L15)
         output_name = f"droka_basic_output_E{energy_angle_val}_L{lateral_angle_val}"
+        output_layer = outputs['Pulito_Finale']['OUTPUT']
         
-        # Recuperiamo la destinazione effettiva dell'output
-        output_layer = outputs['DeleteFields']['OUTPUT']
-        
-        # Passiamo il nome dinamico al contesto di QGIS
         context.addLayerToLoadOnCompletion(
             output_layer,
             QgsProcessingContext.LayerDetails(output_name, context.project(), 'Results_drokaBasic')
@@ -507,6 +571,8 @@ class RockfallDrokaBasic(QgsProcessingAlgorithm):
 
         results['Results_drokaBasic'] = output_layer
         return results
+
+
     def name(self):
         return 'Rockfall - Droka basic'
 
@@ -522,7 +588,6 @@ class RockfallDrokaBasic(QgsProcessingAlgorithm):
     def shortHelpString(self):
         return """<html><body><p><!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0//EN" "http://www.w3.org/TR/REC-html40/strict.dtd">
 <html><head><meta name="qrichtext" content="1" /><style type="text/css">
-p, li { white-space: pre-wrap; }
 </style></head><body style=" font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;">
 <p style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><span style=" font-size:14pt; font-weight:600;">DROKA BASIC</span></p>
 <p style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">Droka_basic is based on the Cone method which enables the definition of the area affected by rockfall events on a slope. This is achieved through a cone representing the envelope of all possible rockfall paths. The apex of the cone is located at the source point and its geometry is defined by three angles: the dip direction angle θ of the slope at the source point defines the orientation of the cone; the energy angle ϕp outlines its vertical extension and the lateral spreading angle α delineates the extension of the cone in the horizontal plane.</p>
@@ -550,10 +615,9 @@ p, li { white-space: pre-wrap; }
 <p>Energy angle ϕp = cost  (°)</p>
 <h3>Mass (kg)</h3>
 <p>Mass of the block (kg)</p>
-<h2>Esempi</h2>
+<h2></h2>
 <p><!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0//EN" "http://www.w3.org/TR/REC-html40/strict.dtd">
 <html><head><meta name="qrichtext" content="1" /><style type="text/css">
-p, li { white-space: pre-wrap; }
 </style></head><body style=" font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;">
 <p style="-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;"><br /></p></body></html></p><br><p align="right">Autore della guida: Claudio Fasciano</p></body></html>"""
 
