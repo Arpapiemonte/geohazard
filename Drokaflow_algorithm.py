@@ -13,12 +13,12 @@
  ***************************************************************************/
 
 /***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
+ * *
+ * This program is free software; you can redistribute it and/or modify  *
+ * it under the terms of the GNU General Public License as published by  *
+ * the Free Software Foundation; either version 2 of the License, or     *
+ * (at your option) any later version.                                   *
+ * *
  ***************************************************************************/
 """
 
@@ -31,7 +31,6 @@ __copyright__ = '(C) 2024 by Campus S., Castelli M., Fasciano C., Filipello A.'
 __revision__ = '$Format:%H$'
 
 import os
-# Importa QIcon da PyQt5 per le icone
 from PyQt5.QtGui import QIcon 
 
 from qgis.core import QgsProcessing
@@ -43,22 +42,15 @@ from qgis.core import QgsProcessingParameterVectorLayer
 from qgis.core import QgsProcessingParameterFeatureSink
 from qgis.core import QgsProcessingParameterDefinition
 from qgis.core import QgsCoordinateReferenceSystem
+from qgis.core import QgsProcessingContext
+
 import processing
 
-from qgis.core import QgsProcessingContext, QgsCoordinateReferenceSystem
-
 class RockfallDrokaFlow(QgsProcessingAlgorithm):
-## Aggiunta Icona
+
     def icon(self):
-        """
-        Should return a QIcon which is used for your provider inside
-        the Processing toolbox.
-        """
-        # Individua la cartella del plugin in cui risiede questo file script
         cmd_folder = os.path.dirname(__file__)
-        # Costruisce il percorso relativo verso la sottocartella icons
         icon_path = os.path.join(cmd_folder, 'icons', 'droka_flow.png')
-        
         return QIcon(icon_path)
 
     def initAlgorithm(self, config=None):
@@ -67,17 +59,18 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         self.addParameter(QgsProcessingParameterVectorLayer('source_point', 'Source point', types=[QgsProcessing.TypeVectorPoint], defaultValue=None))
         self.addParameter(QgsProcessingParameterNumber('weight_kg', 'Weight (kg)', type=QgsProcessingParameterNumber.Double, defaultValue=100))
         self.addParameter(QgsProcessingParameterNumber('energy_angle_', 'Energy angle (°)', type=QgsProcessingParameterNumber.Double, defaultValue=35))
+        
         param = QgsProcessingParameterNumber('mean_of_the_normal_standard_distribution', 'Mean of the normal standard distribution', type=QgsProcessingParameterNumber.Double, defaultValue=0)
         param.setFlags(param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
         self.addParameter(param)
+        
         param = QgsProcessingParameterNumber('standard_deviation', 'Standard deviation', type=QgsProcessingParameterNumber.Double, defaultValue=0.1)
         param.setFlags(param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
         self.addParameter(param)
+        
         self.addParameter(QgsProcessingParameterFeatureSink('Results_drokaBasic', 'Results_Droka basic', type=QgsProcessing.TypeVectorAnyGeometry, createByDefault=True, supportsAppend=True, defaultValue=None))
 
     def processAlgorithm(self, parameters, context, model_feedback):
-        # Use a multi-step feedback, so that individual child algorithm progress reports are adjusted for the
-        # overall progress through the model
         feedback = QgsProcessingMultiStepFeedback(52, model_feedback)
         results = {}
         outputs = {}
@@ -86,8 +79,8 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         alg_params = {
             'EXTENT': parameters['dtm'],
             'MEAN': parameters['mean_of_the_normal_standard_distribution'],
-            'OUTPUT_TYPE': 0,  # Float32
-            'PIXEL_SIZE': parameters['cell_size'],
+            'OUTPUT_TYPE': 0,
+            'PIXEL_SIZE': parameters['cell_size'] + 0.00001,
             'STDDEV': parameters['standard_deviation'],
             'TARGET_CRS': parameters['dtm'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -102,8 +95,8 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         alg_params = {
             'EXTENT': parameters['dtm'],
             'MEAN': parameters['mean_of_the_normal_standard_distribution'],
-            'OUTPUT_TYPE': 0,  # Float32
-            'PIXEL_SIZE': parameters['cell_size'],
+            'OUTPUT_TYPE': 0,
+            'PIXEL_SIZE': parameters['cell_size'] + 0.00002,
             'STDDEV': parameters['standard_deviation'],
             'TARGET_CRS': parameters['dtm'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -116,16 +109,13 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
 
         # r.drain_1
         alg_params = {
-            '-a': False,
-            '-c': True,
-            '-d': False,
-            '-n': False,
+            '-a': False, '-c': True, '-d': False, '-n': False,
             'GRASS_MIN_AREA_PARAMETER': 0.0001,
-            'GRASS_OUTPUT_TYPE_PARAMETER': 0,  # auto
+            'GRASS_OUTPUT_TYPE_PARAMETER': 0,
             'GRASS_RASTER_FORMAT_META': None,
             'GRASS_RASTER_FORMAT_OPT': None,
-            'GRASS_REGION_CELLSIZE_PARAMETER': 0,
-            'GRASS_REGION_PARAMETER': None,
+            'GRASS_REGION_CELLSIZE_PARAMETER': parameters['cell_size'],
+            'GRASS_REGION_PARAMETER': parameters['dtm'],
             'GRASS_SNAP_TOLERANCE_PARAMETER': -1,
             'GRASS_VECTOR_DSCO': None,
             'GRASS_VECTOR_EXPORT_NOCAT': False,
@@ -145,39 +135,24 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
 
         # DTM2
         alg_params = {
-            'BAND_A': 1,
-            'BAND_B': 1,
-            'BAND_C': None,
-            'BAND_D': None,
-            'BAND_E': None,
-            'BAND_F': None,
-            'EXTENT_OPT': 0,  # Ignore
-            'EXTRA': '',
-            'FORMULA': 'A+B',
-            'INPUT_A': parameters['dtm'],
-            'INPUT_B': outputs['Random_1']['OUTPUT'],
-            'INPUT_C': None,
-            'INPUT_D': None,
-            'INPUT_E': None,
-            'INPUT_F': None,
-            'NO_DATA': None,
-            'OPTIONS': '',
-            'PROJWIN': None,
-            'RTYPE': 5,  # Float32
+            'INPUT': [parameters['dtm'], outputs['Random_1']['OUTPUT']],
+            'STATISTIC': 2,
+            'NODATA_POLICY': 0,
+            'REFERENCE_LAYER': parameters['dtm'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        outputs['Dtm2'] = processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        outputs['Dtm2'] = processing.run('native:cellstatistics', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
 
         feedback.setCurrentStep(4)
         if feedback.isCanceled():
             return {}
-
+        
         # Random_2
         alg_params = {
             'EXTENT': parameters['dtm'],
             'MEAN': parameters['mean_of_the_normal_standard_distribution'],
-            'OUTPUT_TYPE': 0,  # Float32
-            'PIXEL_SIZE': parameters['cell_size'],
+            'OUTPUT_TYPE': 0,
+            'PIXEL_SIZE': parameters['cell_size'] + 0.00004,
             'STDDEV': parameters['standard_deviation'],
             'TARGET_CRS': parameters['dtm'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -190,16 +165,11 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
 
         # r.drain_2
         alg_params = {
-            '-a': False,
-            '-c': True,
-            '-d': False,
-            '-n': False,
+            '-a': False, '-c': True, '-d': False, '-n': False,
             'GRASS_MIN_AREA_PARAMETER': 0.0001,
-            'GRASS_OUTPUT_TYPE_PARAMETER': 0,  # auto
-            'GRASS_RASTER_FORMAT_META': None,
-            'GRASS_RASTER_FORMAT_OPT': None,
-            'GRASS_REGION_CELLSIZE_PARAMETER': 0,
-            'GRASS_REGION_PARAMETER': None,
+            'GRASS_OUTPUT_TYPE_PARAMETER': 0,
+            'GRASS_REGION_CELLSIZE_PARAMETER': parameters['cell_size'],
+            'GRASS_REGION_PARAMETER': parameters['dtm'],
             'GRASS_SNAP_TOLERANCE_PARAMETER': -1,
             'GRASS_VECTOR_DSCO': None,
             'GRASS_VECTOR_EXPORT_NOCAT': False,
@@ -234,8 +204,8 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         alg_params = {
             'EXTENT': parameters['dtm'],
             'MEAN': parameters['mean_of_the_normal_standard_distribution'],
-            'OUTPUT_TYPE': 0,  # Float32
-            'PIXEL_SIZE': parameters['cell_size'],
+            'OUTPUT_TYPE': 0,
+            'PIXEL_SIZE': parameters['cell_size'] + 0.00003,
             'STDDEV': parameters['standard_deviation'],
             'TARGET_CRS': parameters['dtm'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -250,7 +220,7 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         alg_params = {
             'EXTENT': parameters['dtm'],
             'NUMBER': parameters['weight_kg'],
-            'OUTPUT_TYPE': 5,  # Float32
+            'OUTPUT_TYPE': 5,
             'PIXEL_SIZE': parameters['cell_size'],
             'TARGET_CRS': parameters['dtm'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -263,28 +233,13 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
 
         # DTM4
         alg_params = {
-            'BAND_A': 1,
-            'BAND_B': 1,
-            'BAND_C': None,
-            'BAND_D': None,
-            'BAND_E': None,
-            'BAND_F': None,
-            'EXTENT_OPT': 0,  # Ignore
-            'EXTRA': '',
-            'FORMULA': 'A+B',
-            'INPUT_A': parameters['dtm'],
-            'INPUT_B': outputs['Random_3']['OUTPUT'],
-            'INPUT_C': None,
-            'INPUT_D': None,
-            'INPUT_E': None,
-            'INPUT_F': None,
-            'NO_DATA': None,
-            'OPTIONS': '',
-            'PROJWIN': None,
-            'RTYPE': 5,  # Float32
+            'INPUT': [parameters['dtm'], outputs['Random_3']['OUTPUT']],
+            'STATISTIC': 2,
+            'NODATA_POLICY': 0,
+            'REFERENCE_LAYER': parameters['dtm'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        outputs['Dtm4'] = processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        outputs['Dtm4'] = processing.run('native:cellstatistics', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
 
         feedback.setCurrentStep(10)
         if feedback.isCanceled():
@@ -292,93 +247,71 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
 
         # DTM5
         alg_params = {
-            'BAND_A': 1,
-            'BAND_B': 1,
-            'BAND_C': None,
-            'BAND_D': None,
-            'BAND_E': None,
-            'BAND_F': None,
-            'EXTENT_OPT': 0,  # Ignore
-            'EXTRA': '',
-            'FORMULA': 'A+B',
-            'INPUT_A': parameters['dtm'],
-            'INPUT_B': outputs['Random_4']['OUTPUT'],
-            'INPUT_C': None,
-            'INPUT_D': None,
-            'INPUT_E': None,
-            'INPUT_F': None,
-            'NO_DATA': None,
-            'OPTIONS': '',
-            'PROJWIN': None,
-            'RTYPE': 5,  # Float32
+            'INPUT': [parameters['dtm'], outputs['Random_4']['OUTPUT']],
+            'STATISTIC': 2,
+            'NODATA_POLICY': 0,
+            'REFERENCE_LAYER': parameters['dtm'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        outputs['Dtm5'] = processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        outputs['Dtm5'] = processing.run('native:cellstatistics', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
 
         feedback.setCurrentStep(11)
         if feedback.isCanceled():
             return {}
 
-        # vector_1
-        # Da raster a vettore: creo i punti sulla linea di r.drain
-        # Creo il campo quota
-        alg_params = {
-            'FIELD_NAME': 'quota_1',
-            'INPUT_RASTER': outputs['Rdrain_1']['output'],
-            'RASTER_BAND': 1,
-            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-        }
-        outputs['Vector_1'] = processing.run('native:pixelstopoints', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-
-        feedback.setCurrentStep(12)
-        if feedback.isCanceled():
-            return {}
-
         # vector_2
-        alg_params = {
-            'FIELD_NAME': 'quota_2',
-            'INPUT_RASTER': outputs['Rdrain_2']['output'],
+        alg_params_p2p = {
+            'FIELD_NAME': 'valore_pixel',
+            'INPUT_RASTER': outputs['Rdrain_2']['output'], # <-- MODIFICATO: 'output' invece di 'drain'
             'RASTER_BAND': 1,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        outputs['Vector_2'] = processing.run('native:pixelstopoints', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-
-        feedback.setCurrentStep(13)
-        if feedback.isCanceled():
-            return {}
+        points_drain_2 = processing.run('native:pixelstopoints', alg_params_p2p, context=context, feedback=feedback, is_child_algorithm=True)
+        
+        alg_params = {
+            'COLUMN_PREFIX': 'quota_2',
+            'INPUT': points_drain_2['OUTPUT'],
+            'RASTERCOPY': outputs['Dtm2']['OUTPUT'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Vector_2'] = processing.run('native:rastersampling', alg_params, context=context, feedback=feedback, is_child_algorithm=True)        
 
         # DTM3
         alg_params = {
-            'BAND_A': 1,
-            'BAND_B': 1,
-            'BAND_C': None,
-            'BAND_D': None,
-            'BAND_E': None,
-            'BAND_F': None,
-            'EXTENT_OPT': 0,  # Ignore
-            'EXTRA': '',
-            'FORMULA': 'A+B',
-            'INPUT_A': parameters['dtm'],
-            'INPUT_B': outputs['Random_2']['OUTPUT'],
-            'INPUT_C': None,
-            'INPUT_D': None,
-            'INPUT_E': None,
-            'INPUT_F': None,
-            'NO_DATA': None,
-            'OPTIONS': '',
-            'PROJWIN': None,
-            'RTYPE': 5,  # Float32
+            'INPUT': [parameters['dtm'], outputs['Random_2']['OUTPUT']],
+            'STATISTIC': 2,
+            'NODATA_POLICY': 0,
+            'REFERENCE_LAYER': parameters['dtm'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        outputs['Dtm3'] = processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        outputs['Dtm3'] = processing.run('native:cellstatistics', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
 
         feedback.setCurrentStep(14)
         if feedback.isCanceled():
             return {}
+            
+        # vector_1
+        alg_params_p2p = {
+            'FIELD_NAME': 'valore_pixel',
+            'INPUT_RASTER': outputs['Rdrain_1']['output'], # <-- MODIFICATO: 'output' invece di 'drain'
+            'RASTER_BAND': 1,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        points_drain_1 = processing.run('native:pixelstopoints', alg_params_p2p, context=context, feedback=feedback, is_child_algorithm=True)
+
+        alg_params = {
+            'COLUMN_PREFIX': 'quota_1',
+            'INPUT': points_drain_1['OUTPUT'],
+            'RASTERCOPY': parameters['dtm'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Vector_1'] = processing.run('native:rastersampling', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(14)
+        if feedback.isCanceled():
+            return {}           
 
         # Attribute union_1
-        # Unisco i campi "start_elev" e "quota" nello stesso layer
-        # Imposto 10000 come punti iniziali massimi
         alg_params = {
             'DISCARD_NONMATCHING': False,
             'FIELDS_TO_COPY': ['start_elev1'],
@@ -396,12 +329,11 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             return {}
 
         # Calculate field shadow_1
-        # creo una colonna con il valore dell'angolo del cono d'ombra
         alg_params = {
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'shadow_1',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
+            'FIELD_TYPE': 0,
             'FORMULA': parameters['energy_angle_'],
             'INPUT': outputs['AttributeUnion_1']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -417,29 +349,20 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'cone_1',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
-            'FORMULA': '( "start_elev1" - (tan(radians( "shadow_1" ))* "distance" )) -  "quota_1" ',
+            'FIELD_TYPE': 0,
+            'FORMULA': '( "start_elev1" - (tan(radians( "shadow_1" )) * "distance" )) - "quota_11"',
             'INPUT': outputs['CalculateFieldShadow_1']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        outputs['DeltaCalculation_1'] = processing.run('native:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-
-        feedback.setCurrentStep(17)
-        if feedback.isCanceled():
-            return {}
+        outputs['DeltaCalculation_1'] = processing.run('native:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)            
 
         # r.drain_3
         alg_params = {
-            '-a': False,
-            '-c': True,
-            '-d': False,
-            '-n': False,
+            '-a': False, '-c': True, '-d': False, '-n': False,
             'GRASS_MIN_AREA_PARAMETER': 0.0001,
-            'GRASS_OUTPUT_TYPE_PARAMETER': 0,  # auto
-            'GRASS_RASTER_FORMAT_META': None,
-            'GRASS_RASTER_FORMAT_OPT': None,
-            'GRASS_REGION_CELLSIZE_PARAMETER': 0,
-            'GRASS_REGION_PARAMETER': None,
+            'GRASS_OUTPUT_TYPE_PARAMETER': 0,
+            'GRASS_REGION_CELLSIZE_PARAMETER': parameters['cell_size'],
+            'GRASS_REGION_PARAMETER': parameters['dtm'],
             'GRASS_SNAP_TOLERANCE_PARAMETER': -1,
             'GRASS_VECTOR_DSCO': None,
             'GRASS_VECTOR_EXPORT_NOCAT': False,
@@ -459,16 +382,11 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
 
         # r.drain_5
         alg_params = {
-            '-a': False,
-            '-c': True,
-            '-d': False,
-            '-n': False,
+            '-a': False, '-c': True, '-d': False, '-n': False,
             'GRASS_MIN_AREA_PARAMETER': 0.0001,
-            'GRASS_OUTPUT_TYPE_PARAMETER': 0,  # auto
-            'GRASS_RASTER_FORMAT_META': None,
-            'GRASS_RASTER_FORMAT_OPT': None,
-            'GRASS_REGION_CELLSIZE_PARAMETER': 0,
-            'GRASS_REGION_PARAMETER': None,
+            'GRASS_OUTPUT_TYPE_PARAMETER': 0,
+            'GRASS_REGION_CELLSIZE_PARAMETER': parameters['cell_size'],
+            'GRASS_REGION_PARAMETER': parameters['dtm'],
             'GRASS_SNAP_TOLERANCE_PARAMETER': -1,
             'GRASS_VECTOR_DSCO': None,
             'GRASS_VECTOR_EXPORT_NOCAT': False,
@@ -488,16 +406,11 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
 
         # r.drain_4
         alg_params = {
-            '-a': False,
-            '-c': True,
-            '-d': False,
-            '-n': False,
+            '-a': False, '-c': True, '-d': False, '-n': False,
             'GRASS_MIN_AREA_PARAMETER': 0.0001,
-            'GRASS_OUTPUT_TYPE_PARAMETER': 0,  # auto
-            'GRASS_RASTER_FORMAT_META': None,
-            'GRASS_RASTER_FORMAT_OPT': None,
-            'GRASS_REGION_CELLSIZE_PARAMETER': 0,
-            'GRASS_REGION_PARAMETER': None,
+            'GRASS_OUTPUT_TYPE_PARAMETER': 0,
+            'GRASS_REGION_CELLSIZE_PARAMETER': parameters['cell_size'],
+            'GRASS_REGION_PARAMETER': parameters['dtm'],
             'GRASS_SNAP_TOLERANCE_PARAMETER': -1,
             'GRASS_VECTOR_DSCO': None,
             'GRASS_VECTOR_EXPORT_NOCAT': False,
@@ -533,59 +446,67 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             return {}
 
         # vector_4
-        alg_params = {
-            'FIELD_NAME': 'quota_4',
-            'INPUT_RASTER': outputs['Rdrain_4']['output'],
+        alg_params_p2p = {
+            'FIELD_NAME': 'valore_pixel',
+            'INPUT_RASTER': outputs['Rdrain_4']['output'], # <-- MODIFICATO: 'output' invece di 'drain'
             'RASTER_BAND': 1,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        outputs['Vector_4'] = processing.run('native:pixelstopoints', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-
-        feedback.setCurrentStep(22)
-        if feedback.isCanceled():
-            return {}
+        points_drain_4 = processing.run('native:pixelstopoints', alg_params_p2p, context=context, feedback=feedback, is_child_algorithm=True)
+        
+        alg_params = {
+            'COLUMN_PREFIX': 'quota_4',
+            'INPUT': points_drain_4['OUTPUT'],
+            'RASTERCOPY': outputs['Dtm4']['OUTPUT'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Vector_4'] = processing.run('native:rastersampling', alg_params, context=context, feedback=feedback, is_child_algorithm=True)    
 
         # vector_5
-        alg_params = {
-            'FIELD_NAME': 'quota_5',
-            'INPUT_RASTER': outputs['Rdrain_5']['output'],
+        alg_params_p2p = {
+            'FIELD_NAME': 'valore_pixel',
+            'INPUT_RASTER': outputs['Rdrain_5']['output'], # <-- MODIFICATO: 'output' invece di 'drain'
             'RASTER_BAND': 1,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        outputs['Vector_5'] = processing.run('native:pixelstopoints', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        points_drain_5 = processing.run('native:pixelstopoints', alg_params_p2p, context=context, feedback=feedback, is_child_algorithm=True)
 
-        feedback.setCurrentStep(23)
-        if feedback.isCanceled():
-            return {}
-
-        # vector_3
         alg_params = {
-            'FIELD_NAME': 'quota_3',
-            'INPUT_RASTER': outputs['Rdrain_3']['output'],
+            'COLUMN_PREFIX': 'quota_5',
+            'INPUT': points_drain_5['OUTPUT'],
+            'RASTERCOPY': outputs['Dtm5']['OUTPUT'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Vector_5'] = processing.run('native:rastersampling', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+      # vector_3
+        alg_params_p2p = {
+            'FIELD_NAME': 'valore_pixel',
+            'INPUT_RASTER': outputs['Rdrain_3']['output'], # <-- MODIFICATO: 'output' invece di 'drain'
             'RASTER_BAND': 1,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        outputs['Vector_3'] = processing.run('native:pixelstopoints', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-
-        feedback.setCurrentStep(24)
-        if feedback.isCanceled():
-            return {}
+        points_drain_3 = processing.run('native:pixelstopoints', alg_params_p2p, context=context, feedback=feedback, is_child_algorithm=True)
+      
+        alg_params = {
+            'COLUMN_PREFIX': 'quota_3',
+            'INPUT': points_drain_3['OUTPUT'],
+            'RASTERCOPY': outputs['Dtm3']['OUTPUT'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Vector_3'] = processing.run('native:rastersampling', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
 
         # Calculate field shadow2
         alg_params = {
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'shadow_2',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
+            'FIELD_TYPE': 0,
             'FORMULA': parameters['energy_angle_'],
             'INPUT': outputs['AttributeUnion_2']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['CalculateFieldShadow2'] = processing.run('native:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-
-        feedback.setCurrentStep(25)
-        if feedback.isCanceled():
-            return {}
 
         # Attribute union_5
         alg_params = {
@@ -617,15 +538,11 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         }
         outputs['AttributeUnion_3'] = processing.run('native:joinbynearest', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
 
-        feedback.setCurrentStep(27)
-        if feedback.isCanceled():
-            return {}
-
         # Attribute union_4
         alg_params = {
             'DISCARD_NONMATCHING': False,
             'FIELDS_TO_COPY': ['start_elev1'],
-            'INPUT': outputs['Vector_3']['OUTPUT'],
+            'INPUT': outputs['Vector_4']['OUTPUT'],
             'INPUT_2': outputs['Quota_start']['OUTPUT'],
             'MAX_DISTANCE': None,
             'NEIGHBORS': 10000,
@@ -634,22 +551,18 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         }
         outputs['AttributeUnion_4'] = processing.run('native:joinbynearest', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
 
-        feedback.setCurrentStep(28)
-        if feedback.isCanceled():
-            return {}
-
         # Calculate field shadow5
         alg_params = {
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'shadow_5',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
+            'FIELD_TYPE': 0,
             'FORMULA': parameters['energy_angle_'],
             'INPUT': outputs['AttributeUnion_5']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['CalculateFieldShadow5'] = processing.run('native:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-
+        
         feedback.setCurrentStep(29)
         if feedback.isCanceled():
             return {}
@@ -659,8 +572,8 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'cone_5',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
-            'FORMULA': '( "start_elev1" - (tan(radians( "shadow_5" ))* "distance" ))- "quota_5"',
+            'FIELD_TYPE': 0,
+            'FORMULA': '( "start_elev1" - (tan(radians( "shadow_5" )) * "distance" )) - "quota_51"',
             'INPUT': outputs['CalculateFieldShadow5']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
@@ -671,45 +584,35 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             return {}
 
         # Delta calculation_2
-        # tolgo dal calcolo 
-        # (- @fill_dem_correction_m)
         alg_params = {
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'cone_2',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
-            'FORMULA': '( "start_elev1" - (tan(radians( "shadow_2"))* "distance" )) -  "quota_2"',
+            'FIELD_TYPE': 0,
+            'FORMULA': '( "start_elev1" - (tan(radians( "shadow_2" )) * "distance" )) - "quota_21"',
             'INPUT': outputs['CalculateFieldShadow2']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['DeltaCalculation_2'] = processing.run('native:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-
-        feedback.setCurrentStep(31)
-        if feedback.isCanceled():
-            return {}
 
         # Calculate field shadow3
         alg_params = {
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'shadow_3',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
+            'FIELD_TYPE': 0,
             'FORMULA': parameters['energy_angle_'],
             'INPUT': outputs['AttributeUnion_3']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['CalculateFieldShadow3'] = processing.run('native:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
 
-        feedback.setCurrentStep(32)
-        if feedback.isCanceled():
-            return {}
-
         # Calculate field shadow4
         alg_params = {
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'shadow_4',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
+            'FIELD_TYPE': 0,
             'FORMULA': parameters['energy_angle_'],
             'INPUT': outputs['AttributeUnion_4']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -725,8 +628,8 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'cone_4',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
-            'FORMULA': '( "start_elev1" - (tan(radians( "shadow_4" ))* "distance" ))- "quota_4"',
+            'FIELD_TYPE': 0,
+            'FORMULA': '( "start_elev1" - (tan(radians( "shadow_4" )) * "distance" )) - "quota_41"',
             'INPUT': outputs['CalculateFieldShadow4']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
@@ -737,28 +640,21 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             return {}
 
         # Delta calculation_3
-        # tolgo dal calcolo 
-        # (- @fill_dem_correction_m) 
-        # (- @fill_dem_correction_m)
         alg_params = {
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'cone_3',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
-            'FORMULA': '( "start_elev1" - (tan(radians( "shadow_3" ))* "distance" ))- "quota_3"',
+            'FIELD_TYPE': 0,
+            'FORMULA': '( "start_elev1" - (tan(radians( "shadow_3" )) * "distance" )) - "quota_31"',
             'INPUT': outputs['CalculateFieldShadow3']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['DeltaCalculation_3'] = processing.run('native:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
 
-        feedback.setCurrentStep(35)
-        if feedback.isCanceled():
-            return {}
-
         # Vectors fusion
         alg_params = {
-            'CRS': QgsCoordinateReferenceSystem('EPSG:32632'),
-            'LAYERS': [outputs['DeltaCalculation_1']['OUTPUT'],outputs['DeltaCalculation_4']['OUTPUT'],outputs['DeltaCalculation_5']['OUTPUT'],outputs['DeltaCalculation_2']['OUTPUT'],outputs['DeltaCalculation_3']['OUTPUT']],
+            'CRS': parameters['dtm'].crs() if hasattr(parameters['dtm'], 'crs') else QgsCoordinateReferenceSystem('EPSG:32632'),
+            'LAYERS': [outputs['DeltaCalculation_1']['OUTPUT'], outputs['DeltaCalculation_4']['OUTPUT'], outputs['DeltaCalculation_5']['OUTPUT'], outputs['DeltaCalculation_2']['OUTPUT'], outputs['DeltaCalculation_3']['OUTPUT']],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['VectorsFusion'] = processing.run('native:mergevectorlayers', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
@@ -791,12 +687,11 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             return {}
 
         # Energy
-        # da gestire con variabile python
         alg_params = {
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'energy',
             'FIELD_PRECISION': 2,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
+            'FIELD_TYPE': 0,
             'FORMULA': 'CASE\r\nWHEN "cone_1" IS NOT NULL THEN ("mass_1" *9.8*"cone_1"/1000)\r\nWHEN "cone_2" IS NOT NULL THEN ("mass_1" *9.8*"cone_2"/1000)\r\nWHEN "cone_3" IS NOT NULL THEN ("mass_1" *9.8*"cone_3"/1000)\r\nWHEN "cone_4" IS NOT NULL THEN ("mass_1" *9.8*"cone_4"/1000)\r\nELSE ("mass_1" *9.8*"cone_5"/1000)\r\nEND',
             'INPUT': outputs['FieldBoulder_mass']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -824,7 +719,7 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             'FIELD_LENGTH': 10,
             'FIELD_NAME': 'velocity',
             'FIELD_PRECISION': 3,
-            'FIELD_TYPE': 0,  # Decimale (doppia precisione)
+            'FIELD_TYPE': 0,
             'FORMULA': 'CASE\r\nWHEN "cone_1" IS NOT NULL THEN (sqrt(2*9.81* "cone_1"))\r\nWHEN "cone_2" IS NOT NULL THEN (sqrt(2*9.81* "cone_2"))\r\nWHEN "cone_3" IS NOT NULL THEN (sqrt(2*9.81* "cone_3"))\r\nWHEN "cone_4" IS NOT NULL THEN (sqrt(2*9.81* "cone_4"))\r\nELSE (sqrt(2*9.81* "cone_5"))\r\nEND',
             'INPUT': outputs['Energy0']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -851,7 +746,7 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             'EXTENT': outputs['Velocity']['OUTPUT'],
             'HOVERLAY': 0,
             'HSPACING': parameters['cell_size'],
-            'TYPE': 0,  # Punto
+            'TYPE': 0,
             'VOVERLAY': 0,
             'VSPACING': parameters['cell_size'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
@@ -878,8 +773,8 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             'INPUT': outputs['Grid_spatial']['OUTPUT'],
             'JOIN': outputs['Velocity_spatial']['OUTPUT'],
             'JOIN_FIELDS': ['energy'],
-            'PREDICATE': [2],  # è uguale
-            'SUMMARIES': [2,3,6],  # min,max,media
+            'PREDICATE': [2],
+            'SUMMARIES': [2, 3, 6],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['Recap_energy'] = processing.run('native:joinbylocationsummary', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
@@ -894,8 +789,8 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
             'INPUT': outputs['Recap_energy']['OUTPUT'],
             'JOIN': outputs['Velocity_spatial']['OUTPUT'],
             'JOIN_FIELDS': ['velocity'],
-            'PREDICATE': [2],  # è uguale
-            'SUMMARIES': [2,3,6],  # min,max,media
+            'PREDICATE': [2],
+            'SUMMARIES': [2, 3, 6],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['Recap_velocity'] = processing.run('native:joinbylocationsummary', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
@@ -904,47 +799,9 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         if feedback.isCanceled():
             return {}
 
-        # # Delete fields
-        # alg_params = {
-            # 'COLUMN': ['left','top','right','bottom','row_index','col_index'],
-            # 'INPUT': outputs['Recap_velocity']['OUTPUT'],
-            # 'OUTPUT': parameters['Results_drokaBasic']
-        # }
-        # outputs['DeleteFields'] = processing.run('native:deletecolumn', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        # results['Results_drokaBasic'] = outputs['DeleteFields']['OUTPUT']
-        # return results
-        
-        
-        # # Nuovo Delete fields
-        # alg_params = {
-            # 'COLUMN': ['left','top','right','bottom','row_index','col_index'],
-            # 'INPUT': outputs['Recap_velocity']['OUTPUT'],
-            # 'OUTPUT': parameters['Results_drokaBasic']
-        # }
-        # outputs['DeleteFields'] = processing.run('native:deletecolumn', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        
-        # # --- COSTRUZIONE DEL NOME DINAMICO IN BASE ALL'ENERGY ANGLE ---
-        # # Recuperiamo il valore dell'energy angle inserito dall'utente
-        # energy_angle_val = parameters.get('energy_angle_', '')
-        
-        # # Creiamo il nome del file includendo il valore dell'angolo (es. droka_flow_output_E35)
-        # output_name = f"droka_flow_output_E{energy_angle_val}"
-        
-        # # Recuperiamo il layer finale di output
-        # output_layer = outputs['DeleteFields']['OUTPUT']
-        
-        # # Passiamo il nome dinamico al contesto di QGIS per caricarlo correttamente a schermo
-        # context.addLayerToLoadOnCompletion(
-            # output_layer,
-            # QgsProcessingContext.LayerDetails(output_name, context.project(), 'Results_drokaBasic')
-        # )
-        # # ------------------------------------------------------------
-
-        # results['Results_drokaBasic'] = output_layer
-        # return results    
-# Nuovo Delete fields (Modificato l'output in TEMPORARY_OUTPUT)
+        # Delete fields
         alg_params = {
-            'COLUMN': ['left','top','right','bottom','row_index','col_index'],
+            'COLUMN': ['left', 'top', 'right', 'bottom', 'row_index', 'col_index'],
             'INPUT': outputs['Recap_velocity']['OUTPUT'],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
@@ -954,15 +811,13 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         if feedback.isCanceled():
             return {}
 
-        # --- INTEGRAZIONE CON STRUMENTO PER PULIZIA DEI DATI CNON CONNESSI ALLA SORGENTE DEL CROLLO---
-        
-        # 1. Buffer (IMPOSTATO 3 VOLTE IL PASSO DEL DTM, MA DA MODIFICARE)
+        # 1. Buffer
         alg_params = {
             'DISSOLVE': False,
             'DISTANCE': parameters['cell_size'] * 3,
-            'END_CAP_STYLE': 0,  # Arrotondato
+            'END_CAP_STYLE': 0,
             'INPUT': outputs['DeleteFields']['OUTPUT'],
-            'JOIN_STYLE': 0,  # Arrotondato
+            'JOIN_STYLE': 0,
             'MITER_LIMIT': 2,
             'SEGMENTS': 1,
             'SEPARATE_DISJOINT': False,
@@ -1002,7 +857,7 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         alg_params = {
             'INPUT': outputs['DaMultiParteAPartiSingole']['OUTPUT'],
             'INTERSECT': parameters['source_point'],
-            'PREDICATE': [0],  # interseca
+            'PREDICATE': [0],
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         outputs['Estrai1'] = processing.run('native:extractbylocation', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
@@ -1011,27 +866,24 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
         if feedback.isCanceled():
             return {}
 
-        # 5. Estrai 2 (Output finale salvato nel parametro definitivo)
+        # 5. Estrai 2
         alg_params = {
             'INPUT': outputs['DeleteFields']['OUTPUT'],
             'INTERSECT': outputs['Estrai1']['OUTPUT'],
-            'PREDICATE': [4,6],  # tocca,sono contenuti
+            'PREDICATE': [4, 6],
             'OUTPUT': parameters['Results_drokaBasic']
         }
         outputs['Estrai2'] = processing.run('native:extractbylocation', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
         
-        # --- COSTRUZIONE DEL NOME DINAMICO IN BASE ALL'ENERGY ANGLE ---
+        # --- NOME DINAMICO IN BASE ALL'ENERGY ANGLE ---
         energy_angle_val = parameters.get('energy_angle_', '')
         output_name = f"droka_flow_output_E{energy_angle_val}_pulito"
-        
-        # Il layer finale diventa ora il risultato di Estrai2
         output_layer = outputs['Estrai2']['OUTPUT']
         
         context.addLayerToLoadOnCompletion(
             output_layer,
             QgsProcessingContext.LayerDetails(output_name, context.project(), 'Results_drokaBasic')
         )
-        # ------------------------------------------------------------
 
         results['Results_drokaBasic'] = output_layer
         return results        
@@ -1047,6 +899,7 @@ class RockfallDrokaFlow(QgsProcessingAlgorithm):
 
     def groupId(self):
         return 'Landslide'
+
 
     def shortHelpString(self):
         return """<html><body><p><!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0//EN" "http://www.w3.org/TR/REC-html40/strict.dtd">
